@@ -12,7 +12,6 @@ import sqlite3
 import time
 
 
-
 class KRX:
     def __init__(self):
         self.driver = webdriver.Firefox()
@@ -64,7 +63,7 @@ class DBMaker:
         self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Company_code text, Date text, closing_price text, market_price text, high_price text, low_price text, volume text)")
     def makeKosTable(self, tableName):
         self.cursor = self.con.cursor()
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, companyCode text, Event text)")
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, companyCode text, Event text, TotalPrice int, Market text)")
 
     def closeDB(self):
         self.con.close()
@@ -100,7 +99,7 @@ class GetEvents(DBMaker):
 
 
     #가격 정보 가져오기 
-    def eventPrices(self, tableName, companyCode, date):
+    def eventPrices(self, date, tableName, companyCode):
         DBMaker.makeEventTalbe(self, tableName)
         marketTotalPrice= []
         for i in range(10):
@@ -126,24 +125,27 @@ class GetEvents(DBMaker):
             if (i%10 == 0):
                 time.sleep(1)
             #시가 총액 계산
-            marketTotalPrice.append(closingPrice*volume)
+            closingPrice = str(closingPrice).replace(",", "")
+            volume = str(volume).replace(",", "")
+            marketTotalPrice.append(int(closingPrice)*int(volume))
             print(marketTotalPrice[i])
 
         #db에 올리기
         self.con.commit()
+        return marketTotalPrice
 
 
 
 class GetKos(DBMaker):
     #회사이름, 회사코드, 종목 가져와서 저장 
-    def companies(self, tableName, companyCode, date):
+    def companies(self, date, tableName, companyCode, totalPrice, market):
         DBMaker.makeKosTable(self, tableName)
-        for i in range(len(companyCode)): 
+        for i in range(10): 
         #save in sqlite
             company = companyCode[i].find_previous_sibling('td').string
             code = companyCode[i].string 
             event = companyCode[i].find_next().string
-            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?)", (date, company, code, event))
+            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?)", (date, company, code, event, totalPrice[i], market))
         self.con.commit()
 
 
@@ -151,7 +153,7 @@ class GetKos(DBMaker):
 def main():
     #오늘의 날짜
     date = datetime.datetime.now().strftime('%Y%m%d')
-    '''
+'''
     #코스피, 코스닥 excel 파일 다운로드
     krx = KRX()
     krx.accessToKRX()
@@ -166,18 +168,18 @@ def main():
 #    event.changeToTxt('상장법인목록.xls')
     event.openFile('KOSPI.txt')
     kospiCompanyCode = event.findCompanyCode()    
-    event.eventPrices("kospiEvent"+date, kospiCompanyCode, date)
+    kospiMarketTotalPrice = event.eventPrices(date, "kospiEvent"+date, kospiCompanyCode)
     kos = GetKos("C:\\Users\\SeheeKim\\Downloads", "C:\\Users\\SeheeKim\\Desktop\\Project\\Project1\\Stock.db")
-    kos.companies("kospi"+date, kospiCompanyCode, date)
+    kos.companies(date, "kospi"+date, kospiCompanyCode, kospiMarketTotalPrice, "KOSPI")
 
     #코스닥 종목별 저장 
 #   event.changeToTxt('상장법인목록(1).xls')
     event.openFile('KOSDAQ.txt')
     kosdaqCompanyCode = event.findCompanyCode()
-    event.eventPrices("kosdaqEvent"+date, kosdaqCompanyCode, date)
+    kosdaqMarketTotalPrice = event.eventPrices(date, "kosdaqEvent"+date, kosdaqCompanyCode)
 
     #코스피 회사명, 회사코드, 종목 저장 
-    kos.companies("kosdaq"+date, kosdaqCompanyCode, date)
+    kos.companies(date, "kosdaq"+date, kosdaqCompanyCode, kosdaqMarketTotalPrice, "KOSDAQ")
     
     kos.closeDB()
 
@@ -197,7 +199,6 @@ if __name__=="__main__":
 
 
 
-#table 이미 있는지 없는지 검사하는 거 추가
-#사이즈 계산
+
 #종목별 분류
 #실적 
