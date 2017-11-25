@@ -60,10 +60,11 @@ class DBMaker:
     #db table 생성
     def makeEventTalbe(self, tableName):
         self.cursor = self.con.cursor()
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Company_code text, Date text, closing_price text, market_price text, high_price text, low_price text, volume text)")
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(CompanyCode text, Date text, ClosingPrice text, MarketPrice text, HighPrice text, LowPrice text, Volume text)")
     def makeKosTable(self, tableName):
         self.cursor = self.con.cursor()
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, companyCode text, Event text, TotalPrice int, Market text)")
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, CompanyCode text, Event text, TotalPrice int, Market text, Size text)")
+
 
     def closeDB(self):
         self.con.close()
@@ -98,7 +99,7 @@ class GetEvents(DBMaker):
         return self.kospiSoup.select('td[style*="@"]')
 
 
-    #가격 정보 가져오기 
+    #종목별 가격 정보 저장 
     def eventPrices(self, date, tableName, companyCode):
         DBMaker.makeEventTalbe(self, tableName)
         marketTotalPrice= []
@@ -121,14 +122,13 @@ class GetEvents(DBMaker):
             volume = lowPrice.find_next().string
             #db에 저장
             self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?, ?)", (companyCode[i].string, date, closingPrice, marketPrice, highPrice, lowPrice, volume))
-
+            #쉬어가기~
             if (i%10 == 0):
                 time.sleep(1)
             #시가 총액 계산
             closingPrice = str(closingPrice).replace(",", "")
             volume = str(volume).replace(",", "")
             marketTotalPrice.append(int(closingPrice)*int(volume))
-            print(marketTotalPrice[i])
 
         #db에 올리기
         self.con.commit()
@@ -137,23 +137,80 @@ class GetEvents(DBMaker):
 
 
 class GetKos(DBMaker):
-    #회사이름, 회사코드, 종목 가져와서 저장 
-    def companies(self, date, tableName, companyCode, totalPrice, market):
+
+    #회사 정보 가져와서 저장 
+    def companies(self, date, tableName, companyCode, totalPrice, market, size):
         DBMaker.makeKosTable(self, tableName)
         for i in range(10): 
         #save in sqlite
             company = companyCode[i].find_previous_sibling('td').string
             code = companyCode[i].string 
             event = companyCode[i].find_next().string
-            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?)", (date, company, code, event, totalPrice[i], market))
+            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?, ?)", (date, company, code, event, totalPrice[i], market, size[i]))
         self.con.commit()
 
 
 
+    #코스피 사이즈 계산
+    def kospiSize(self, totalPrice):
+        
+        kospiSize = [None]*len(totalPrice)
+        
+        #딕셔너리에 [시가총액:index] 형식으로 저장 
+        dic = {}
+        for i in range(len(totalPrice)):
+            dic[int(totalPrice[i])] = i
+        
+        #시가총액 내림차순으로 정렬 
+        marketRanking = []
+        marketRanking = sorted(totalPrice, key=int, reverse=True)
+        
+        for i in range(len(totalPrice)):
+            if (i<=3):
+                kospiSize[dic[marketRanking[i]]] = "LargeCap"
+            elif (i<=5):
+                kospiSize[dic[marketRanking[i]]] = "MidCap"
+            else:
+                kospiSize[dic[marketRanking[i]]] = "SmallCap"
+        
+        return kospiSize
+
+
+
+    #코스닥 사이즈 계산 
+    def kosdaqSize(self, totalPrice):
+
+        kosdaqSize = [None]*len(totalPrice)
+
+        #딕셔너리에 [시가총액:index] 형식으로 저장 
+        dic = {}
+        for i in range(len(totalPrice)):
+            dic[int(totalPrice[i])] = i
+
+        #시가총액 내림차순으로 정렬
+        marketRanking = []
+        marketRanking = sorted(totalPrice, key=int, reverse=True)
+        
+        for i in range(len(totalPrice)):
+            if (i<=3):
+                kosdaqSize[dic[marketRanking[i]]] = "100"
+            elif (i<=5):
+                kosdaqSize[dic[marketRanking[i]]] = "Mid 300"
+            else:
+                kosdaqSize[dic[marketRanking[i]]] = "Small"
+        
+        return kosdaqSize
+
+
+        
+
+
 def main():
+
     #오늘의 날짜
     date = datetime.datetime.now().strftime('%Y%m%d')
-'''
+
+
     #코스피, 코스닥 excel 파일 다운로드
     krx = KRX()
     krx.accessToKRX()
@@ -161,26 +218,56 @@ def main():
     krx.downloadKospi()
     krx.search('rKosdaq')
     krx.downloadKosdaq()
-'''
-    event = GetEvents("C:\\Users\\SeheeKim\\Downloads", "C:\\Users\\SeheeKim\\Desktop\\Project\\Project1\\Stock.db")
-    event.moveToFileDirection()
-    #코스피 종목별 저장 
-#    event.changeToTxt('상장법인목록.xls')
-    event.openFile('KOSPI.txt')
-    kospiCompanyCode = event.findCompanyCode()    
-    kospiMarketTotalPrice = event.eventPrices(date, "kospiEvent"+date, kospiCompanyCode)
-    kos = GetKos("C:\\Users\\SeheeKim\\Downloads", "C:\\Users\\SeheeKim\\Desktop\\Project\\Project1\\Stock.db")
-    kos.companies(date, "kospi"+date, kospiCompanyCode, kospiMarketTotalPrice, "KOSPI")
 
-    #코스닥 종목별 저장 
-#   event.changeToTxt('상장법인목록(1).xls')
-    event.openFile('KOSDAQ.txt')
-    kosdaqCompanyCode = event.findCompanyCode()
-    kosdaqMarketTotalPrice = event.eventPrices(date, "kosdaqEvent"+date, kosdaqCompanyCode)
+
+
+    #객체 생성
+    event = GetEvents("C:\\Users\\SeheeKim\\Downloads", "C:\\Users\\SeheeKim\\Desktop\\Project\\Project1\\Stock.db")
+    kos = GetKos("C:\\Users\\SeheeKim\\Downloads", "C:\\Users\\SeheeKim\\Desktop\\Project\\Project1\\Stock.db")
+    #다운로드 폴더로 이동 
+    event.moveToFileDirection()
+
+
+
+
+    ###코스피
+    event.changeToTxt('상장법인목록.xls')
+    event.openFile('KOSPI.txt')
+
+    #종목별 코드 찾기 
+    kospiCompanyCode = event.findCompanyCode()
+
+    #종목별 정보 저장     
+    kospiMarketTotalPrice = event.eventPrices(date, "kospiEvent"+date, kospiCompanyCode)
+
+    #코스피 종목 사이즈 분류 
+    kospiSize = kos.kospiSize(kospiMarketTotalPrice)
 
     #코스피 회사명, 회사코드, 종목 저장 
-    kos.companies(date, "kosdaq"+date, kosdaqCompanyCode, kosdaqMarketTotalPrice, "KOSDAQ")
-    
+    kos.companies(date, "kospi"+date, kospiCompanyCode, kospiMarketTotalPrice, "KOSPI", kospiSize)
+
+
+
+
+    ###코스닥
+    event.changeToTxt('상장법인목록(1).xls')
+    event.openFile('KOSDAQ.txt')
+
+    #종목별 코드 찾기
+    kosdaqCompanyCode = event.findCompanyCode()
+
+    #종목별 정보 저장
+    kosdaqMarketTotalPrice = event.eventPrices(date, "kosdaqEvent"+date, kosdaqCompanyCode)
+
+    #종목 사이즈 분류
+    kosdaqSize = kos.kosdaqSize(kosdaqMarketTotalPrice)
+
+    #회사명, 회사코드, 종목 저장 
+    kos.companies(date, "kosdaq"+date, kosdaqCompanyCode, kosdaqMarketTotalPrice, "KOSDAQ", kosdaqSize)
+
+
+
+    event.closeDB()
     kos.closeDB()
 
     #오늘 쓴 파일 지우기
@@ -197,8 +284,8 @@ if __name__=="__main__":
 
 
 
-
-
+#subprocess
+#사이즈 구하는거 범위 바꾸기!! 
 
 #종목별 분류
 #실적 
