@@ -63,7 +63,7 @@ class DBMaker:
         self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(CompanyCode text, Date text, ClosingPrice text, MarketPrice text, HighPrice text, LowPrice text, Volume text)")
     def makeKosTable(self, tableName):
         self.cursor = self.con.cursor()
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, CompanyCode text, Event text, TotalPrice int, Market text, Size text)")
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS "+tableName+"(Date text, CompanyName text, CompanyCode text, Event text, EventCode int, TotalPrice int, Market text, Size text)")
 
 
     def closeDB(self):
@@ -141,12 +141,20 @@ class GetKos(DBMaker):
     #회사 정보 가져와서 저장 
     def companies(self, date, tableName, companyCode, totalPrice, market, size):
         DBMaker.makeKosTable(self, tableName)
+        eventCode = {}
+        index = 0
         for i in range(10): 
         #save in sqlite
             company = companyCode[i].find_previous_sibling('td').string
             code = companyCode[i].string 
             event = companyCode[i].find_next().string
-            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?, ?)", (date, company, code, event, totalPrice[i], market, size[i]))
+
+            #종목 분류 (코드 부여)
+            if not(event in eventCode):
+                eventCode[event] = index
+                index += 1
+
+            self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?, ?, ?)", (date, company, code, event, eventCode[event], totalPrice[i], market, size[i]))
         self.con.commit()
 
 
@@ -201,6 +209,7 @@ class GetKos(DBMaker):
         
         return kosdaqSize
 
+    
 
         
 
@@ -212,13 +221,12 @@ def main():
 
 
     #코스피, 코스닥 excel 파일 다운로드
-    krx = KRX()
-    krx.accessToKRX()
-    krx.search('rWertpapier')
-    krx.downloadKospi()
-    krx.search('rKosdaq')
-    krx.downloadKosdaq()
-
+#    krx = KRX()
+#    krx.accessToKRX()
+#    krx.search('rWertpapier')
+#    krx.downloadKospi()
+#    krx.search('rKosdaq')
+#    krx.downloadKosdaq()
 
 
     #객체 생성
