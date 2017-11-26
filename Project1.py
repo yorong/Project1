@@ -103,10 +103,12 @@ class GetEvents(DBMaker):
     def eventPrices(self, date, tableName, companyCode):
         DBMaker.makeEventTalbe(self, tableName)
         marketTotalPrice= []
-        for i in range(10):
+        for i in range(len(companyCode)):
             #코드 별 당일 시세 사이트에서 가져오기
             url = "http://finance.naver.com/item/sise_day.nhn?code="+companyCode[i].string
-            r = requests.get(url, auth=('user', 'pass'))
+            user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.95 Safari/537.36'}
+
+            r = requests.get(url, headers = user_agent, auth=('user', 'pass'))
             data = r.text
             soup = BeautifulSoup(data, "html.parser")
 
@@ -122,13 +124,13 @@ class GetEvents(DBMaker):
             volume = lowPrice.find_next().string
             #db에 저장
             self.cursor.execute("INSERT INTO "+tableName+" VALUES(?, ?, ?, ?, ?, ?, ?)", (companyCode[i].string, date, closingPrice, marketPrice, highPrice, lowPrice, volume))
-            #쉬어가기~
-            if (i%10 == 0):
-                time.sleep(1)
             #시가 총액 계산
             closingPrice = str(closingPrice).replace(",", "")
             volume = str(volume).replace(",", "")
             marketTotalPrice.append(int(closingPrice)*int(volume))
+            #쉬어가기~
+            if (i%10 == 0):
+                time.sleep(2)
 
         #db에 올리기
         self.con.commit()
@@ -143,7 +145,7 @@ class GetKos(DBMaker):
         DBMaker.makeKosTable(self, tableName)
         eventCode = {}
         index = 0
-        for i in range(10): 
+        for i in range(len(companyCode)): 
         #save in sqlite
             company = companyCode[i].find_previous_sibling('td').string
             code = companyCode[i].string 
@@ -174,9 +176,9 @@ class GetKos(DBMaker):
         marketRanking = sorted(totalPrice, key=int, reverse=True)
         
         for i in range(len(totalPrice)):
-            if (i<=3):
+            if (i<100):
                 kospiSize[dic[marketRanking[i]]] = "LargeCap"
-            elif (i<=5):
+            elif (i<300):
                 kospiSize[dic[marketRanking[i]]] = "MidCap"
             else:
                 kospiSize[dic[marketRanking[i]]] = "SmallCap"
@@ -200,9 +202,9 @@ class GetKos(DBMaker):
         marketRanking = sorted(totalPrice, key=int, reverse=True)
         
         for i in range(len(totalPrice)):
-            if (i<=3):
+            if (i<100):
                 kosdaqSize[dic[marketRanking[i]]] = "100"
-            elif (i<=5):
+            elif (i<400):
                 kosdaqSize[dic[marketRanking[i]]] = "Mid 300"
             else:
                 kosdaqSize[dic[marketRanking[i]]] = "Small"
