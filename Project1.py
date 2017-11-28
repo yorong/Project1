@@ -130,7 +130,7 @@ class GetEvents(DBMaker):
             marketTotalPrice.append(int(closingPrice)*int(volume))
             #쉬어가기~
             if (i%10 == 0):
-                time.sleep(2)
+                time.sleep(10)
 
         #db에 올리기
         self.con.commit()
@@ -211,10 +211,27 @@ class GetKos(DBMaker):
         
         return kosdaqSize
 
-    
 
+class GetPerformance():
+    def Performance(self, date, tableName, companyCode):
+        DBMaker.makeEventTalbe(self, tableName)
+
+        for i in range(10):
+            #코드 별 실적 가져오기 
+            url = "http://finance.naver.com/item/main.nhn?code="+companyCode[i].string
+            user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.95 Safari/537.36'}
+
+            r = requests.get(url, headers = user_agent, auth=('user', 'pass'))
+            data = r.text
+            soup = BeautifulSoup(data, "html.parser")
+
+            tmp = soup.find('th', {'class' : 'h_th2 th_cop_anal8'})
+            Sales = tmp.find_next().string
+
+            print(Sales)
         
 
+            
 
 def main():
 
